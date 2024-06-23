@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres_msNAT
+    restart: always
+    environment:
+      - POSTGRES_USER=pushnotidev
+      - POSTGRES_PASSWORD=pushnotidev
+      - POSTGRES_DB=msNAT
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+
+  mailhog:
+    image: 'jcalonso/mailhog:latest'
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP 
+
+  auth-service:
+    build: ./auth-service
+    environment:
+      DATABASE_URL: postgres://pushnotidev:pushnotidev@postgres:5432/msNAT?sslmode=disable
+      NATS_URL: nats://nats:4222
+    depends_on:
+      - postgres
+      - nats
+    command: ["air"]
+    volumes:
+      - ./auth-service:/app
+    ports:
+      - "3001:3001"
+  
+  mailing-service:
+    build: ./mailing-service
+    environment:
+      NATS_URL: nats://nats:4222
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+    depends_on:
+      - nats
+      - mailhog
+    command: ["air"]
+    volumes:
+      - ./mailing-service:/app
+    ports:
+      - "3002:3002"
+
+  pgadmin:
+    container_name: pgadmin4_msNAT
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    logging:
+      driver: "none"  # Disable logging for this container
+
+volumes:
+  postgres_data:
